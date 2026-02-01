@@ -9,10 +9,16 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import ValidationError
 from rest_framework import permissions
+from rest_framework.permissions import AllowAny
+from .utility import send_simple_email, check_email
+import random
+from .models import VerifyCode
+from django.utils import timezone
 # Create your views here.
 
 
 class SignUpView(APIView):
+    permission_classes = [AllowAny, ]
     serilizer_class = SignUpSerializer
     queryset = User
     
@@ -30,6 +36,8 @@ class SignUpView(APIView):
 
 
 class LoginView(APIView):
+    permission_classes = [AllowAny, ]
+    
     def post(self,request):
         username = self.request.data.get('username')
         password = self.request.data.get('password')
@@ -112,3 +120,72 @@ class PasswordChangeView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({'message': 'Parol yangilandi', 'status':status.HTTP_200_OK})
+    
+    
+
+class ForgotView(APIView):
+    permission_classes = [AllowAny,]
+    
+    def post(self, request):
+        email = self.request.data.get('email')
+        email = check_email(email)
+        if email:
+            user = User.objects.filter(email=email).first()
+            if user is None:
+                raise ValidationError({'status': status.HTTP_400_BAD_REQUEST,'message':'Bizda bunaqa user mavjud emas'})
+            code = random.randint(1000, 9999)
+            VerifyCode.objects.create(
+                user=user,
+                code=code,
+        )
+            send_simple_email(user.email, code)
+            data = {
+                'status': status.HTTP_200_OK,
+                'message': 'Kod emailga yuborildi'
+            }
+            return Response(data)
+        data = {
+            'status': status.HTTP_400_BAD_REQUEST,
+            'message': 'Xatolik'
+        }
+        return Response(data)
+    
+class ResetCodeView(APIView):
+    permission_classes = [AllowAny,]
+    
+    def post(self, request):
+        email = self.request.data.get('email')
+        code = self.request.data.get('code')
+        new_password = self.request.data.get('new_password')
+        
+        email = check_email(email)
+        if email:
+            user = User.objects.filter(email=email).first()
+            if user is None:
+                raise ValidationError({'status': status.HTTP_400_BAD_REQUEST,'message':'Bizda bunaqa user mavjud emas'})
+            verify_code = VerifyCode.objects.filter(user=user, code=code, is_active=False).order_by('-id').first()
+            if verify_code is None:
+                raise ValidationError({'status': status.HTTP_400_BAD_REQUEST,'message':'Kod xato'})
+            if verify_code.expiration_time < timezone.now():
+                raise ValidationError({'status': status.HTTP_400_BAD_REQUEST,'message':'Kodning muddati tugagan'})
+            verify_code.is_active = True
+            verify_code.save()
+            
+            if new_password:
+                user.set_password(new_password)
+                user.save()
+                data = {
+                    'status': status.HTTP_200_OK,
+                    'message': 'Parol yangilandi'
+                }
+            else:
+                data = {
+                    'status': status.HTTP_200_OK,
+                    'message': 'Kod tasdiqlandi'
+            }
+            return Response(data)
+        data = {
+            'status': status.HTTP_400_BAD_REQUEST,
+            'message': 'Xatolik'
+        }
+        return Response(data)

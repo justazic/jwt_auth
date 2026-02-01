@@ -9,13 +9,13 @@ class SignUpSerializer(serializers.ModelSerializer):
     confirm_pass = serializers.CharField(write_only=True)
     class Meta:
         model = User
-        feilds = ['username', 'first_name', 'password', 'confrim_pass']
+        fields = ['username', 'email', 'password', 'confirm_pass']
         
     def validate(self, attrs):
         password = attrs.get('password')
         confirm_pass = attrs.get('confirm_pass')
         if password is None or confirm_pass is None or password != confirm_pass:
-            raise ValidationError({'suscess': False, 'messgae': "Parollar toliq kiritilmagan"})
+            raise ValidationError({'success': False, 'message': "Parollar toliq kiritilmagan"})
         return attrs
     
     
